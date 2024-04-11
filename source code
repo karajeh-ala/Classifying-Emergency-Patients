@@ -1,0 +1,223 @@
+#Merging datasets & extracting length of stay:
+mergedset <- merge(triage, patients, by = ("subject_id"))
+triage4 <- merge(mergedset, edstays, by = c("subject_id", "stay_id"))
+triage3 <- triage4[,c(1:15,18:19,21:23)]
+intime <- as.POSIXct(triage3$intime, format = "%Y/%m/%d %H:%M:%S")
+outtime <- as.POSIXct(triage3$outtime, format = "%Y/%m/%d %H:%M:%S")
+library(data.table)
+intime <- as.data.table(intime) 
+outtime <- as.data.table(outtime)
+inyear <- format(intime, format = "%Y")
+triage3 <- cbind(triage3, inyear)
+names(triage3)[21] <- "in_Year"
+names(triage3)[12] <- "gender"
+triage3$in_Year <- as.numeric(triage3$in_Year)
+triage3$age <- triage3$in_Year - triage3$anchor_year + triage3$anchor_age
+triage3$length_of_stay <- as.numeric(triage3$outtime - triage3$intime)
+triage3$length_of_stay <- (triage3$length_of_stay/3600)
+triage3$length_of_stay <- round(triage3$length_of_stay, digits = 2)
+
+triage2 <- subset(triage3, acuity== 1 | acuity == 2 | acuity == 3 | acuity == 4 | acuity == 5)
+triage2 <- triage2[ ,c(1:12,18:23)]
+triage2$chiefcomplaint <- as.factor(triage2$chiefcomplaint)
+triage2$gender <- as.factor(triage2$gender)
+triage2$race <- as.factor(triage2$race)
+triage2$pain <- as.numeric(triage2$pain)
+colnames(triage2)[11] <- "complaints"
+triage2 <- triage2[,-c(1:2,13,16)]
+triage2$acuity <- as.numeric(triage2$acuity)
+triage2 <- triage2[,c(1:8,13,9:12,14)]
+triage2_p1 <- triage2[1:100000, ]
+triage2_p2 <- triage2[100001:200000, ]
+triage2_p3 <- triage2[200001:300000, ]
+triage2_p4 <- triage2[300001:440384, ]
+library(VIM)
+triage2p1_imp <- kNN(triage2_p1, imp_var=FALSE)
+triage2p2_imp <- kNN(triage2_p2, imp_var=FALSE)
+triage2p3_imp <- kNN(triage2_p3, imp_var=FALSE)
+triage2p4_imp <- kNN(triage2_p4, imp_var=FALSE)
+triage2_imp <- rbind(triage2p1_imp, triage2p2_imp, triage2p3_imp, triage2p4_imp)
+triage2 <- triage2_imp
+
+#For fast-track dataset:
+triage2$Urgency_Status <- NA
+
+
+library(dplyr)
+triage2 <- triage2 %>%
+  mutate(Urgency_Status = ifelse((triage2$acuity == 3 | triage2$acuity == 4 | triage2$acuity == 5) & triage2$disposition == "HOME" & triage2$length_of_stay < 4.00, "Fast track", "Complex"))
+triage_fasttrack <- triage2[,c(-8,-13,-14)]
+triage_fasttrack$Urgency_Status <- as.factor(triage_fasttrack$Urgency_Status)
+
+#Identifying major complaints for fast-track cases:
+library(data.table)
+triage9 <- subset(triage2, acuity == 3 & disposition =="HOME" & length_of_stay < 4.00)
+triage9_comp <- as.data.table(table(triage9$complaints))
+triage10 <- subset(triage2, (acuity == 4 | acuity == 5) & disposition =="HOME" & length_of_stay < 4.00)
+triage10_complaints <- as.data.table(table(triage10$complaints))
+triage17 <- subset(triage2, (acuity == 3 | acuity == 4 | acuity == 5) & disposition =="HOME" & length_of_stay < 4.00)
+triage17_complaints <- as.data.table(table(triage17$complaints))
+triage15 <- subset(triage2, Urgency_Status == "Fast track")
+triage15_complaints <- as.data.table(table(triage15$complaints))
+triage16 <- subset(triage2, Urgency_Status == "Complex")
+triage16_complaints <- as.data.table(table(triage16$complaints))
+
+triage_fasttrack$Urgency_Status <- as.factor(triage_fasttrack$Urgency_Status)
+triage_fasttrack$acuity <- as.factor(triage_fasttrack$acuity)
+triage_fasttrack$pain <- droplevels(triage_fasttrack$pain)
+
+#Categorizing key complaints (ESI & LOS & Disp):
+library(forcats)
+triage_fasttrack$complaints <- fct_collapse(triage_fasttrack$complaints, Back_pain = c("Back pain","BACK PAIN"), Headache = c("HEADACHE", "Headache") , Abdominal_pain = c("Abd pain", "ABD PAIN"), Status_post_fall = c("s/p Fall","S/P FALL"), Rash = c("Rash","RASH"), Suture_removal = c("Suture removal","SUTURE REMOVAL"))
+triage_fasttrack <- triage_fasttrack[triage_fasttrack$complaints == "Chest pain" | triage_fasttrack$complaints == "Abdominal_pain" | triage_fasttrack$complaints == "Dyspnea" | triage_fasttrack$complaints =="Abdominal_pain" | triage_fasttrack$complaints == "SI" | triage_fasttrack$complaints == "Status_post_fall" | triage_fasttrack$complaints == "ETOH" | triage_fasttrack$complaints == "Wound eval" | triage_fasttrack$complaints == "Headache" | triage_fasttrack$complaints == "Back_pain" | triage_fasttrack$complaints == "Lower back pain" | triage_fasttrack$complaints == "Rash" | triage_fasttrack$complaints == "Wound eval" | triage_fasttrack$complaints == "Back_pain" | triage_fasttrack$complaints == "Finger laceration" | triage_fasttrack$complaints == "Sore throat" | triage_fasttrack$complaints == "L Knee pain" | triage_fasttrack$complaints == "R Knee pain" | triage_fasttrack$complaints == "Dental pain" | triage_fasttrack$complaints == "R Foot pain" | triage_fasttrack$complaints == "Abdominal_pain" | triage_fasttrack$complaints == "Chest pain" | triage_fasttrack$complaints == "Wound eval" | triage_fasttrack$complaints == "Headache" | triage_fasttrack$complaints == "MVC" | triage_fasttrack$complaints == "ILI" | triage_fasttrack$complaints == "Status_post_fall" | triage_fasttrack$complaints == "Back_pain" | triage_fasttrack$complaints == "Lower back pain" | triage_fasttrack$complaints == "Sore throat" | triage_fasttrack$complaints == "MVC" | triage_fasttrack$complaints == "L Foot pain" | triage_fasttrack$complaints == "Toe pain" | triage_fasttrack$complaints == "Laceration" | triage_fasttrack$complaints == "R Ankle pain" | triage_fasttrack$complaints == "Back_pain" | triage_fasttrack$complaints == "Dysuria" | triage_fasttrack$complaints == "L Ankle pain" | triage_fasttrack$complaints == "L Ear pain" | triage_fasttrack$complaints == "Suture_removal" | triage_fasttrack$complaints == "ETOH" | triage_fasttrack$complaints == "Rash" | triage_fasttrack$complaints == "Abdominal_pain" | triage_fasttrack$complaints == "Status_post_fall" | triage_fasttrack$complaints == "Back_pain" | triage_fasttrack$complaints == "Cough" | triage_fasttrack$complaints == "Dysuria" | triage_fasttrack$complaints == "Head injury" | triage_fasttrack$complaints == "Syncope" | triage_fasttrack$complaints == "N/V" | triage_fasttrack$complaints == "Finger laceration" | triage_fasttrack$complaints == "Anxiety" | triage_fasttrack$complaints == "Epistaxis" | triage_fasttrack$complaints == "Headache" | triage_fasttrack$complaints == "R Knee pain" | triage_fasttrack$complaints == "L Knee pain" | triage_fasttrack$complaints == "R Shoulder pain" | triage_fasttrack$complaints == "Dyspnea" | triage_fasttrack$complaints == "Neck pain" | triage_fasttrack$complaints == "R Ankle injury" | triage_fasttrack$complaints == "R Ear pain" | triage_fasttrack$complaints == "Suture_removal" | triage_fasttrack$complaints == "Finger injury" | triage_fasttrack$complaints == "L Eye pain" | triage_fasttrack$complaints == "Med refill" | triage_fasttrack$complaints == "R Eye pain" | triage_fasttrack$complaints == "Rash" | triage_fasttrack$complaints == "L Ankle injury" | triage_fasttrack$complaints == "R Shoulder pain",  ]
+
+triage_fasttrack$complaints <- droplevels(triage_fasttrack$complaints)
+
+#for finding the outliers:
+tempout_ft <- as.data.table(boxplot.stats(triage_fasttrack$temperature)$out)
+hrateout_ft <- as.data.table(boxplot.stats(triage_fasttrack$heartrate)$out)
+resprateout_ft <- as.data.table(boxplot.stats(triage_fasttrack$resprate)$out)
+o2satout_ft <- as.data.table(boxplot.stats(triage_fasttrack$o2sat)$out)
+sbpout_ft <- as.data.table(boxplot.stats(triage_fasttrack$sbp)$out)
+dbpout_ft <- as.data.table(boxplot.stats(triage_fasttrack$dbp)$out)
+painout_ft <- as.data.table(boxplot.stats(triage_fasttrack$pain)$out)
+ageout_ft <- as.data.table(boxplot.stats(triage_fasttrack$age)$out)
+
+#to filter out the outliers
+triage_fasttrack <- triage_fasttrack[triage_fasttrack$temperature < 100.01 & triage_fasttrack$temperature > 95.9, ]
+triage_fasttrack <- triage_fasttrack[triage_fasttrack$heartrate < 130 & triage_fasttrack$heartrate > 37, ]
+triage_fasttrack <- triage_fasttrack[triage_fasttrack$resprate < 22 & triage_fasttrack$resprate > 12, ]
+triage_fasttrack <- triage_fasttrack[triage_fasttrack$o2sat < 110 & triage_fasttrack$o2sat > 94, ]
+triage_fasttrack <- triage_fasttrack[triage_fasttrack$sbp < 191 & triage_fasttrack$sbp > 77, ]
+triage_fasttrack <- triage_fasttrack[triage_fasttrack$dbp < 115 & triage_fasttrack$dbp > 41, ]
+
+#To omit the outliers:
+outliers_temp <- boxplot(triage_fasttrack$temperature, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$temperature %in% outliers_temp, "temperature"] = NA
+outliers_hrate <- boxplot(triage_fasttrack$heartrate, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$heartrate %in% outliers_hrate, "heartrate"] = NA
+outliers_resprate <- boxplot(triage_fasttrack$resprate, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$resprate %in% outliers_resprate, "resprate"] = NA
+outliers_o2sat <- boxplot(triage_fasttrack$o2sat, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$o2sat %in% outliers_o2sat, "o2sat"] = NA
+outliers_sbp <- boxplot(triage_fasttrack$sbp, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$sbp %in% outliers_sbp, "sbp"] = NA
+outliers_dbp <- boxplot(triage_fasttrack$dbp, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$dbp %in% outliers_dbp, "dbp"] = NA
+outliers_pain <- boxplot(triage_fasttrack$pain, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$pain %in% outliers_pain, "pain"] = NA
+outliers_age <- boxplot(triage_fasttrack$age, plot = FALSE)$out
+triage_fasttrack[triage_fasttrack$age %in% outliers_age, "age"] = NA
+
+#Replacing NA's with KNN Imputation:
+library(VIM)
+triage_fasttrack <- kNN(triage_fasttrack, imp_var=FALSE)
+
+#scaling and centering for RF, LR & SGB Models:
+scaledtriage_ft <- scale(triage_fasttrack[,1:8])
+library(data.table)
+scaledtriage_ft <- as.data.table(scaledtriage_ft)
+triage_fasttrack <- cbind(scaledtriage_ft, triage_fasttrack[,9:12])
+remove(scaledtriage_ft)
+
+#Hot Encoding For MLP, CART Models:
+library(fastDummies) 
+triage_fasttrack <- dummy_cols(triage_fasttrack, select_columns = "complaints") 
+triage_fasttrack <- dummy_cols(triage_fasttrack, select_columns = "gender")
+triage_fasttrack <- dummy_cols(triage_fasttrack, select_columns = "arrival_transport")
+triage_fasttrack <- triage_fasttrack[,-c(9:11)]
+
+#ML Models
+#Data Splitting:
+library(caret)
+set.seed(12345)
+index_ft <- createDataPartition(triage_fasttrack$Urgency_Status, p = 0.8, list = FALSE)
+trainData_ft <- triage_fasttrack[index_ft, ]
+validationData_ft <- triage_fasttrack[-index_ft, ]
+
+#For RF, SGB & LR models:
+DataTrain_ft <- trainData_ft[,-12]
+DataValidation_ft <- validationData_ft[,-12]
+
+#For CART & MLP:
+DataTrain_ft <- trainData_ft[,-9]
+DataValidation_ft <- validationData_ft[,-9]
+
+set.seed(1234)
+LRModel <- glm(Urgency_Status ~., family = binomial, data = trainData_ft)
+CARTModel_ft <- train(x = DataTrain_ft, y = trainData_ft$Urgency_Status, method = "rpart", metric = "Accuracy", trControl = trainControl(method = "cv", number = 5), tuneGrid = expand.grid(cp = c(0.01,0.03,0.06,0.001,0.003,0.006,0.0001,0.0003,0.0006,0.00001,0.00003,0.00006)))
+MLPModel_ft <- train(x = DataTrain_ft, y = trainData_ft$Urgency_Status, method = "mlpML", metric = "Accuracy", trControl = trainControl(method = "cv", number = 5), tuneGrid = expand.grid(layer1 = 1:10, layer2 = 1:10, layer3 = 0))
+SGBModel_ft <- train(x = DataTrain_ft, y = trainData_ft$Urgency_Status, method = "gbm", metric = "Accuracy", trControl = trainControl(method = "cv", number = 5), tuneGrid = expand.grid(interaction.depth = c(1:3), shrinkage =0.5, n.trees = c(50,100,150,200,250,500), n.minobsinnode = 10))
+RFModel_ft <- train(x = DataTrain_ft, y = trainData_ft$Urgency_Status, method = "ranger", metric = "Accuracy", num.trees = 250, trControl = trainControl(method = "cv", number = 5), tuneGrid = expand.grid(mtry= c(2,6,11), splitrule ="extratrees", min.node.size =c(1,5,10,15)))
+
+#Models Evaluation:
+predictontestl <- predict(LRModel,newdata=DataValidation_ft,type='response')
+fitted.results <- ifelse(predictontestl > 0.5,"Fast track","Complex")
+fitted.results <- as.data.table(fitted.results)
+fitted.results$fitted.results <- as.factor(fitted.results$fitted.results)
+confusionMatrix(fitted.results$fitted.results, validationData_ft$Urgency_Status, positive = "Fast track")
+
+predictontestrf_ft <- predict(RFModel_ft, newdata = DataValidation_ft)
+confusionMatrix(predictontestrf_ft, validationData_ft$Urgency_Status, positive = "Fast track")
+predictonTestsgb_ft <- predict(SGBModel_ft, newdata = DataValidation_ft)
+confusionMatrix(predictonTestsgb_ft, validationData_ft$Urgency_Status, positive = "Fast track")
+predictOnTestmlp_ft <- predict(MLPModel_ft, newdata = DataValidation_ft)
+confusionMatrix(predictOnTestmlp_ft, validationData_ft$Urgency_Status, positive = "Fast track")
+predictonTestCART_ft <- predict(CARTModel_ft, newdata = DataValidation_ft)
+confusionMatrix(predictonTestCART_ft, validationData_ft$Urgency_Status, positive = "Fast track")
+
+#Bar plot of the subset:
+library(ggplot2)
+ggplot(triage_fasttrack, aes(x = Urgency_Status,fill = acuity)) + geom_bar(position = "stack", width = 0.5) + xlab("Urgency Status") + ylab("Count") + labs(fill="Acuity")
+
+#Variables Importance:
+library(gbm)
+varImp(SGBModel_ft)
+plot(varImp(SGBModel_ft))
+ggplot(data= varImp(SGBModel_ft), aes(x=rownames(varImp(SGBModel_ft)),y=Overall)) +
+  geom_bar(position="dodge",stat="identity", color = "black", fill = "midnightblue") + 
+  coord_flip() + xlab("Predictor")
+
+#Calculating the AUC/ROC:
+library(pROC)
+auc(validationData_ft$Urgency_Status, as.numeric(predictonTestsgb_ft))
+ci.auc(validationData_ft$Urgency_Status, as.numeric(predictonTestsgb_ft))
+auc(validationData_ft$Urgency_Status, as.numeric(predictontestrf_ft))
+ci.auc(validationData_ft$Urgency_Status, as.numeric(predictontestrf_ft))
+auc(validationData_ft$Urgency_Status, as.numeric(predictonTestCART_ft))
+ci.auc(validationData_ft$Urgency_Status, as.numeric(predictonTestCART_ft))
+auc(validationData_ft$Urgency_Status, as.numeric(predictOnTestmlp_ft))
+ci.auc(validationData_ft$Urgency_Status, as.numeric(predictOnTestmlp_ft))
+auc(validationData_ft$Urgency_Status, as.numeric(fitted.results$fitted.results))
+ci.auc(validationData_ft$Urgency_Status, as.numeric(fitted.results$fitted.results))
+
+# ROC Plots:
+roc.pred1 <- roc(validationData_ft$Urgency_Status, as.numeric(predictonTestsgb_ft), percent = TRUE, main = "Smoothing")
+roc.pred2 <- roc(validationData_ft$Urgency_Status, as.numeric(predictontestrf_ft), percent = TRUE, main = "Smoothing")
+roc.pred3 <- roc(validationData_ft$Urgency_Status, as.numeric(predictonTestCART_ft), percent = TRUE, main = "Smoothing")
+roc.pred4 <- roc(validationData_ft$Urgency_Status, as.numeric(predictOnTestmlp_ft), percent = TRUE, main = "Smoothing")
+
+plot.roc(validationData_ft$Urgency_Status, as.numeric(fitted.results$fitted.results), percent = TRUE, main = "ROC curves", add =  FALSE, asp = NA, print.auc = FALSE)
+
+lines(roc.pred1, type = "l", lty = 2, col = "#A52A2A")
+lines(roc.pred2, type = "l", lty = 3, col = "#00FFFF")
+lines(roc.pred3, type = "l", lty = 4, col = "#00FF00")
+lines(roc.pred4, type = "l", lty = 5, pch = 24, col = "#0000FF")
+
+legend("bottomright", 
+       legend = c("LR", "SGB", "RF", "CART", "MLP"), cex = 0.23, col = c("black", "#A52A2A", "#00FFFF", "#00FF00", "#0000FF"),
+       lty = c(1, 2, 3, 4, 5),
+       lwd = c(1, 1, 1, 1, 1))
+
+#Performance measures:
+library(epiR)
+conf_sgb <- table(predictonTestsgb_ft, validationData_ft$Urgency_Status)
+epi.tests(conf_sgb, digits = 4, conf.level = 0.95)
+conf_rf <- table(predictontestrf_ft, validationData_ft$Urgency_Status)
+epi.tests(conf_rf, digits = 4, conf.level = 0.95)
+conf_cart <- table(predictonTestCART_ft, validationData_ft$Urgency_Status)
+epi.tests(conf_cart, digits = 4, conf.level = 0.95)
+conf_mlp <- table(predictOnTestmlp_ft, validationData_ft$Urgency_Status)
+epi.tests(conf_mlp, digits = 4, conf.level = 0.95)
+conf_lr <- table(fitted.results$fitted.results, validationData_ft$Urgency_Status)
+epi.tests(conf_lr, digits = 4, conf.level = 0.95)

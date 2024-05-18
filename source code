@@ -83,14 +83,6 @@ dbpout_ft <- as.data.table(boxplot.stats(triage_fasttrack$dbp)$out)
 painout_ft <- as.data.table(boxplot.stats(triage_fasttrack$pain)$out)
 ageout_ft <- as.data.table(boxplot.stats(triage_fasttrack$age)$out)
 
-#to filter out the outliers
-triage_fasttrack <- triage_fasttrack[triage_fasttrack$temperature < 100.01 & triage_fasttrack$temperature > 95.9, ]
-triage_fasttrack <- triage_fasttrack[triage_fasttrack$heartrate < 130 & triage_fasttrack$heartrate > 37, ]
-triage_fasttrack <- triage_fasttrack[triage_fasttrack$resprate < 22 & triage_fasttrack$resprate > 12, ]
-triage_fasttrack <- triage_fasttrack[triage_fasttrack$o2sat < 110 & triage_fasttrack$o2sat > 94, ]
-triage_fasttrack <- triage_fasttrack[triage_fasttrack$sbp < 191 & triage_fasttrack$sbp > 77, ]
-triage_fasttrack <- triage_fasttrack[triage_fasttrack$dbp < 115 & triage_fasttrack$dbp > 41, ]
-
 #To omit the outliers:
 outliers_temp <- boxplot(triage_fasttrack$temperature, plot = FALSE)$out
 triage_fasttrack[triage_fasttrack$temperature %in% outliers_temp, "temperature"] = NA
